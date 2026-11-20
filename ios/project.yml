@@ -1,0 +1,88 @@
+name: AllFabVideoLibrary
+
+options:
+  minimumXcodeGenVersion: 2.48.0
+  xcodeVersion: "26.6"
+  createIntermediateGroups: true
+  groupSortPosition: top
+  deploymentTarget:
+    iOS: "17.0"
+
+configs:
+  Debug: debug
+  Release: release
+
+configFiles:
+  Debug: Config/Debug.xcconfig
+  Release: Config/Release.xcconfig
+
+settings:
+  base:
+    CURRENT_PROJECT_VERSION: 1
+    MARKETING_VERSION: 0.1.0
+
+targets:
+  AllFabVideoLibrary:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: App/Sources
+    settings:
+      base:
+        INFOPLIST_FILE: App/Resources/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.allfabvideolibrary.dev
+        TARGETED_DEVICE_FAMILY: 2
+        CODE_SIGN_STYLE: Automatic
+
+  AllFabVideoLibraryTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: Tests
+    dependencies:
+      - target: AllFabVideoLibrary
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.allfabvideolibrary.dev.tests
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: 2
+
+  AllFabVideoLibraryUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: UITests
+    dependencies:
+      - target: AllFabVideoLibrary
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.allfabvideolibrary.dev.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: 2
+
+schemes:
+  AllFabVideoLibrary:
+    build:
+      targets:
+        AllFabVideoLibrary: all
+        AllFabVideoLibraryTests: [test]
+        AllFabVideoLibraryUITests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      gatherCoverageData: true
+      targets:
+        - name: AllFabVideoLibraryTests
+          parallelizable: true
+        - name: AllFabVideoLibraryUITests
+          parallelizable: false
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release

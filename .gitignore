@@ -23,6 +23,7 @@ DerivedData/
 *.xcuserstate
 xcuserdata/
 *.xcresult
+ios/AllFabVideoLibrary.xcodeproj/
 
 # Local configuration and secrets
 .env
