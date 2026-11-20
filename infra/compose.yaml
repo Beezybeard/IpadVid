@@ -1,0 +1,59 @@
+name: allfab-video-library
+
+services:
+  postgres:
+    image: postgres:18.7-alpine3.23
+    environment:
+      POSTGRES_DB: ${ALLFAB_POSTGRES_DB:?Set ALLFAB_POSTGRES_DB}
+      POSTGRES_PASSWORD: ${ALLFAB_POSTGRES_PASSWORD:?Set ALLFAB_POSTGRES_PASSWORD}
+      POSTGRES_USER: ${ALLFAB_POSTGRES_USER:?Set ALLFAB_POSTGRES_USER}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          pg_isready
+          --dbname "$${POSTGRES_DB}"
+          --username "$${POSTGRES_USER}"
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+    stop_grace_period: 30s
+
+  object-storage:
+    image: localstack/localstack:4.11.1
+    environment:
+      ALLFAB_OBJECT_STORAGE_BUCKET: ${ALLFAB_OBJECT_STORAGE_BUCKET:?Set ALLFAB_OBJECT_STORAGE_BUCKET}
+      AWS_ACCESS_KEY_ID: ${ALLFAB_OBJECT_STORAGE_ACCESS_KEY:?Set ALLFAB_OBJECT_STORAGE_ACCESS_KEY}
+      AWS_DEFAULT_REGION: ${ALLFAB_OBJECT_STORAGE_REGION:-us-east-1}
+      AWS_SECRET_ACCESS_KEY: ${ALLFAB_OBJECT_STORAGE_SECRET_KEY:?Set ALLFAB_OBJECT_STORAGE_SECRET_KEY}
+      DEBUG: "0"
+      PERSISTENCE: "1"
+      SERVICES: s3
+    ports:
+      - "127.0.0.1:4566:4566"
+    volumes:
+      - localstack-data:/var/lib/localstack
+      - ./localstack/init:/etc/localstack/init/ready.d:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          awslocal s3api head-bucket
+          --bucket "$${ALLFAB_OBJECT_STORAGE_BUCKET}"
+          >/dev/null 2>&1
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 15s
+    restart: unless-stopped
+    stop_grace_period: 20s
+
+volumes:
+  localstack-data:
+  postgres-data:

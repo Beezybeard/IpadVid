@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+
+# JavaScript
+node_modules/
+playwright-report/
+test-results/
+
+# Apple / Xcode
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcresult
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.mobileprovision
+
+# Local media and object-store data
+data/
+uploads/
+*.mp4
+!tests/fixtures/**/*.mp4
+
+# Editors / operating systems
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
