@@ -20,6 +20,10 @@ struct EnrollmentPayload: Encodable, Sendable {
     let display_label: String
 }
 
+struct RefreshPayload: Encodable, Sendable {
+    let refresh_token: String
+}
+
 @MainActor
 protocol CredentialStoring {
     func save(_ credentials: EnrollmentCredentials) throws
@@ -108,6 +112,8 @@ private struct KeychainError: Error, Sendable {
 @MainActor
 protocol EnrollmentServing {
     func enroll(code: String, displayLabel: String) async throws -> EnrollmentCredentials
+    func refresh(refreshToken: String) async throws -> EnrollmentCredentials
+    func currentDevice(accessToken: String) async throws -> DeviceIdentity
 }
 
 struct DeviceEnrollmentClient: EnrollmentServing {
@@ -115,19 +121,61 @@ struct DeviceEnrollmentClient: EnrollmentServing {
     var session: URLSession = .shared
 
     func enroll(code: String, displayLabel: String) async throws -> EnrollmentCredentials {
-        let endpoint = baseURL.appending(path: "/v1/devices/enroll")
-        var request = URLRequest(url: endpoint)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(
-            EnrollmentPayload(code: code, display_label: displayLabel)
+        let payload = EnrollmentPayload(code: code, display_label: displayLabel)
+        let body = try JSONEncoder().encode(payload)
+        do {
+            let data = try await send(path: "/v1/devices/enroll", method: "POST", body: body)
+            return try decodeCredentials(data)
+        } catch EnrollmentError.unauthorized {
+            throw EnrollmentError.invalidCode
+        }
+    }
+
+    func refresh(refreshToken: String) async throws -> EnrollmentCredentials {
+        let payload = RefreshPayload(refresh_token: refreshToken)
+        let body = try JSONEncoder().encode(payload)
+        let data = try await send(path: "/v1/devices/token/refresh", method: "POST", body: body)
+        return try decodeCredentials(data)
+    }
+
+    func currentDevice(accessToken: String) async throws -> DeviceIdentity {
+        let data = try await send(
+            path: "/v1/devices/self",
+            method: "GET",
+            bearerToken: accessToken
         )
+        do {
+            return try JSONDecoder().decode(DeviceIdentity.self, from: data)
+        } catch {
+            throw EnrollmentError.invalidResponse
+        }
+    }
+
+    private func send(
+        path: String,
+        method: String,
+        body: Data? = nil,
+        bearerToken: String? = nil
+    ) async throws -> Data {
+        var request = URLRequest(url: baseURL.appending(path: path))
+        request.httpMethod = method
+        if let body {
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = body
+        }
+        if let bearerToken {
+            request.setValue("Bearer \(bearerToken)", forHTTPHeaderField: "Authorization")
+        }
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw EnrollmentError.invalidResponse }
         guard http.statusCode == 200 else {
-            if http.statusCode == 401 { throw EnrollmentError.invalidCode }
+            if http.statusCode == 401 { throw EnrollmentError.unauthorized }
             throw EnrollmentError.server(statusCode: http.statusCode)
         }
+        return data
+    }
+
+    private func decodeCredentials(_ data: Data) throws -> EnrollmentCredentials {
         do {
             return try KeychainCredentialStore.decodeCredentials(from: data)
         } catch {
@@ -138,6 +186,7 @@ struct DeviceEnrollmentClient: EnrollmentServing {
 
 enum EnrollmentError: Error, Equatable, Sendable {
     case invalidCode
+    case unauthorized
     case invalidResponse
     case server(statusCode: Int)
 }
@@ -148,6 +197,7 @@ final class EnrollmentModel {
     var code = ""
     var displayLabel = ""
     private(set) var isSubmitting = false
+    private(set) var isRestoring = false
     private(set) var message: String?
     private(set) var isEnrolled = false
 
@@ -162,6 +212,40 @@ final class EnrollmentModel {
         self.service = service
         self.credentialStore = credentialStore
         isEnrolled = hasSavedSession
+    }
+
+    func restoreSession(now: Date = .now) async {
+        guard !isRestoring else { return }
+        guard let saved = try? credentialStore.load() else {
+            isEnrolled = false
+            return
+        }
+        isEnrolled = true
+        message = nil
+        isRestoring = true
+        defer { isRestoring = false }
+
+        do {
+            let active: EnrollmentCredentials
+            if saved.access_expires_at > now {
+                active = saved
+            } else {
+                active = try await service.refresh(refreshToken: saved.refresh_token)
+                // Refresh tokens rotate at the server; persist the replacement before further requests.
+                try credentialStore.save(active)
+            }
+            let identity = try await service.currentDevice(accessToken: active.access_token)
+            guard identity.id == active.device.id else {
+                throw EnrollmentError.unauthorized
+            }
+        } catch EnrollmentError.unauthorized {
+            try? credentialStore.delete()
+            isEnrolled = false
+            message = "This iPad’s session expired or was revoked. Enroll again with a new code."
+        } catch {
+            // Keep the saved session available offline; retry server validation when connected.
+            isEnrolled = true
+        }
     }
 
     func submit() async {

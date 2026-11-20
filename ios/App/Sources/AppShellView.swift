@@ -21,6 +21,9 @@ struct AppShellView: View {
             }
         }
         .navigationSplitViewStyle(.balanced)
+        .task {
+            await model.enrollmentModel?.restoreSession()
+        }
     }
 }
 

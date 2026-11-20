@@ -4,7 +4,7 @@
 
 **Current phase:** Phase 1 — catalog and versioned server; Phase 2 iPad shell implementation
 
-**Current milestone:** Native enrollment client, form, and Keychain-backed session boundary authored; Swift compilation and tests are pending macOS CI
+**Current milestone:** Enrollment and Keychain session startup, refresh rotation, and authenticated identity validation authored; this slice is pending macOS CI verification
 
 ## Milestone acceptance
 
@@ -23,7 +23,7 @@
 ## Work completed
 
 - Read the complete handoff and initialized a Git repository on branch `main`.
-- Added the approved iPad foundation: an iPadOS 17+ SwiftUI shell, pinned XcodeGen project definition, unsigned simulator CI workflow, and Swift Testing/XCTest targets. Added an enrollment form and typed `POST /v1/devices/enroll` client, validation/error states, Keychain-backed credential persistence, and session restoration into the offline-library placeholder. Added unit tests for success, invalid input/code, and credential-save failure. Swift source is authored on Windows and has not been compiled by Xcode.
+- Added the approved iPad foundation: an iPadOS 17+ SwiftUI shell, pinned XcodeGen project definition, unsigned simulator CI workflow, and Swift Testing/XCTest targets. Added an enrollment form and typed device client for enrollment, refresh-token rotation, and authenticated `/v1/devices/self` validation. Credentials persist in Keychain; startup refreshes expired access tokens, rejects revoked/identity-mismatched sessions, and preserves local library access when server validation is unavailable. Added unit tests for enrollment, invalid input/code, persistence failure, refresh rotation, revocation, and offline restore. This new session-restoration slice is pending macOS CI verification.
 - Docker Desktop's Linux engine is available in the current environment. Built and ran the API with Docker Compose alongside PostgreSQL and LocalStack; the earlier note that the WSL2 engine could not start is superseded by this live verification.
 - Confirmed Python 3.12.1, Node 26.13.1, npm 11.20.0, and FFmpeg/FFprobe are available.
 - Added repository boundaries, onboarding documentation, Phase 0/1 plan, initial threat model, and ADRs for repository boundaries and readiness semantics.
@@ -66,7 +66,7 @@
 - Secret-pattern scan: **0 matches**; unignored real `.env` files: **0**.
 - Free disk during ECC delivery check: approximately **1,092 GB**.
 - The API's pre-existing Windows `.venv` references a Python installation that is no longer present. Containerized Python 3.12 provided a clean environment for the passing test suite and live dependency checks.
-- iPad host-side validation after enrollment slice: `Info.plist` parses as XML; `ios/project.yml` parses as YAML using the running API container's Python; `git diff --check` passes. No `swift`, `xcodebuild`, or `xcodegen` command is installed on this Windows host. These checks do **not** establish Swift compilation, test success, or Xcode project-generation success.
+- iPad host-side validation for earlier enrollment slice: `Info.plist` parses as XML; `ios/project.yml` parses as YAML using the running API container's Python; `git diff --check` passes. The prior macOS CI run for commit `076de5f` passed XcodeGen project generation, simulator build, unit tests, and UI tests. The newer session-restoration slice is not yet verified; this Windows host has no Swift/Xcode toolchain.
 
 ## ECC roles used
 
@@ -98,6 +98,6 @@ No critical or high security finding remains in this slice. The checked-in crede
 
 ## Codex handoff — immediate next actions
 
-The iPad enrollment client/form and Keychain session boundary are now authored, but remain uncompiled and untested by Swift/Xcode. No Git remote is configured in this workspace, and Windows has no Swift/Xcode toolchain. Configure a private GitHub remote and run `.github/workflows/ios-ci.yml` on its macOS runner; fix any project-generation, compiler, or test failures before expanding the client to refresh/authenticated catalog behavior. The configured API endpoint defaults to loopback for local development; physical-device access requires an approved reachable HTTPS endpoint and must not be enabled through a broad insecure transport exception.
+The app has a typed enrollment API, Keychain-backed credentials, and now an authored session restoration/refresh/identity check slice. The prior iOS CI passed on commit `076de5f`; the current local changes require a new CI run before treating session restoration as verified. The catalog API is not implemented yet, so do not build catalog UI against a fabricated endpoint. The configured API URL defaults to loopback for local development; physical-device access requires an approved reachable HTTPS endpoint and must not be enabled through a broad insecure transport exception. Next after CI passes: implement the authenticated catalog contract/backend first, then add the iOS typed catalog client and tests.
 
 The enrollment backend prerequisite is verified locally. Keep code issuance local-CLI-only pending an approved administrator authentication design; do not add an unauthenticated issuance route. Before production exposure, resolve rate limiting and HTTPS deployment policy. The next bounded app task is the typed iOS enrollment client and Keychain-backed session boundary, but XcodeGen generation, compilation, unit tests, and UI tests still require the unconfigured macOS CI runner. The catalog endpoint, upload validation, signed media authorization, verified download, and AVKit playback remain unimplemented.
