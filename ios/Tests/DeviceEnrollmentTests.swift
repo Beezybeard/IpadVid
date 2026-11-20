@@ -102,7 +102,7 @@ struct DeviceEnrollmentTests {
         let store = CredentialStoreStub()
         store.shouldFailSave = true
         let model = EnrollmentModel(
-            service: EnrollmentServiceStub(result: .success(credentials)),
+            service: EnrollmentServiceStub(enrollmentResult: .success(credentials)),
             credentialStore: store
         )
         model.code = "a-valid-enrollment-code-123"
