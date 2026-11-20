@@ -22,7 +22,7 @@ nonisolated final class AppLaunchUITests: XCTestCase {
         app.launch()
 
         XCTAssertTrue(app.staticTexts["No downloaded videos"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["library.connection.offline"].exists)
+        XCTAssertTrue(app.staticTexts["Offline"].exists)
         XCTAssertFalse(app.buttons["Play"].exists)
     }
 }
