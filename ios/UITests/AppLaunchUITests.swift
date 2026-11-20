@@ -6,12 +6,13 @@ final class AppLaunchUITests: XCTestCase {
         continueAfterFailure = false
     }
 
-    func testNormalLaunchExplainsEnrollmentRequirement() {
+    func testNormalLaunchShowsEnrollmentForm() {
         let app = XCUIApplication()
         app.launch()
 
-        XCTAssertTrue(app.staticTexts["Enrollment required"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Enrollment will be enabled in the next verified slice."].exists)
+        XCTAssertTrue(app.textFields["enrollment.device-name"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.secureTextFields["enrollment.code"].exists)
+        XCTAssertTrue(app.buttons["enrollment.submit"].exists)
     }
 
     func testOfflineLibraryPlaceholderHasNoPlayButton() {

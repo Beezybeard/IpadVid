@@ -2,9 +2,9 @@
 
 **Updated:** 2026-11-20
 
-**Current phase:** Phase 0 — repository and feasibility gates
+**Current phase:** Phase 1 — catalog and versioned server; Phase 2 iPad shell implementation
 
-**Current milestone:** Local dependencies and dependency-aware readiness — implementation complete; live container validation blocked by Windows servicing policy/state
+**Current milestone:** Native enrollment client, form, and Keychain-backed session boundary authored; Swift compilation and tests are pending macOS CI
 
 ## Milestone acceptance
 
@@ -16,16 +16,22 @@
 - [x] FastAPI-generated OpenAPI documents the same typed 200 and 503 response contract.
 - [x] A pinned, loopback-only PostgreSQL and S3-emulator Compose model validates without production credentials.
 - [x] Runtime and development dependencies are hash-locked and vulnerability-audited.
-- [ ] Live containers start healthy and make `/readyz` return HTTP 200 — **BLOCKED: WSL2 and Docker Desktop are installed, but Windows has not deployed the Virtual Machine Platform compute-host payload because a servicing transaction remains pending and local policy disables Windows Update.**
+- [x] Live Compose API, PostgreSQL and object storage start healthy; `/readyz` returns HTTP 200 when dependencies are ready and redacted HTTP 503 during the PostgreSQL outage test.
+- [x] Versioned SQL migrations create catalog entities and safe synthetic category metadata; migration rerun is idempotent against live PostgreSQL.
+- [x] Device enrollment contract, one-use/expiry, hashed credential storage, refresh rotation/replay rejection, revocation, and concurrent duplicate handling are verified against isolated PostgreSQL and the live local stack.
 
 ## Work completed
 
 - Read the complete handoff and initialized a Git repository on branch `main`.
-- Installed missing Git, Docker CLI 29.10.0, and Docker Compose 5.7.2 through Scoop. On 2026-11-20, installed WSL 3.0.5 with WSL2 as the default and Docker Desktop 4.99.0. Two full Windows restarts completed. Elevated DISM commands enabled both required optional features, but Windows did not deploy or register the Hyper-V Host Compute Service (`vmcompute`) payload, so Docker Desktop cannot start its WSL2 engine.
+- Added the approved iPad foundation: an iPadOS 17+ SwiftUI shell, pinned XcodeGen project definition, unsigned simulator CI workflow, and Swift Testing/XCTest targets. Added an enrollment form and typed `POST /v1/devices/enroll` client, validation/error states, Keychain-backed credential persistence, and session restoration into the offline-library placeholder. Added unit tests for success, invalid input/code, and credential-save failure. Swift source is authored on Windows and has not been compiled by Xcode.
+- Docker Desktop's Linux engine is available in the current environment. Built and ran the API with Docker Compose alongside PostgreSQL and LocalStack; the earlier note that the WSL2 engine could not start is superseded by this live verification.
 - Confirmed Python 3.12.1, Node 26.13.1, npm 11.20.0, and FFmpeg/FFprobe are available.
 - Added repository boundaries, onboarding documentation, Phase 0/1 plan, initial threat model, and ADRs for repository boundaries and readiness semantics.
 - Implemented the FastAPI application factory, typed operational schemas, injected readiness service, PostgreSQL `SELECT 1` probe, and authenticated S3 `HeadBucket` probe without import-time network connections.
 - Added exact-tag Compose services for `postgres:18.7-alpine3.23` and `localstack/localstack:4.11.1`, a PostgreSQL 18-correct parent data-volume mount, an idempotent S3 bucket initializer, named volumes, health checks, and loopback-only port publishing.
+- Added a multi-stage, non-root API Docker image using the hash-locked runtime dependency file, a Docker build context exclusion list, and a Compose API service gated on healthy PostgreSQL and object storage.
+- Added a transactional numbered-migration runner, command-line migration entrypoint, and initial catalog schema for categories, videos, immutable video versions, category/tag associations, constraints, and synthetic categories. The container applies migrations before starting Uvicorn.
+- Implemented and verified device enrollment: migration `002_device_enrollment.sql`, opaque hashed one-use codes/tokens, PostgreSQL enrollment/refresh/authentication/revocation adapter, `/v1/devices/enroll`, `/v1/devices/token/refresh`, and authenticated `/v1/devices/self`. A local CLI can issue and revoke credentials; there is no unauthenticated administrative issuance endpoint. Migration runners serialize through a transaction-scoped PostgreSQL advisory lock.
 - Added public local-development configuration examples; real `.env` files, signing material, media, and secrets remain ignored.
 - Added hash-locked runtime and development dependency files and repeatable build, type, lint, test, and audit commands.
 
@@ -34,6 +40,7 @@
 - Original liveness test failed before implementation with `ModuleNotFoundError: No module named 'allfab_api.main'`, then passed.
 - Readiness tests failed before implementation with `ModuleNotFoundError: No module named 'allfab_api.services'`, then passed.
 - FastAPI-generated `/openapi.json` is the authoritative HTTP boundary artifact. Tests assert the `ReadinessResponse` schema for HTTP 200 and 503 and verify actual serialized happy/failure responses.
+- Enrollment RED evidence was one failing migration assertion, one Ruff import-order failure, and 13 Pyright errors. The corrected tree passes the same migration test, Ruff, and Pyright; real PostgreSQL tests cover concurrent migrators, duplicate code redemption, refresh replay, hash-only persistence, expiry, authentication, and revocation.
 
 ## Verification evidence
 
@@ -41,19 +48,25 @@
 - `python -m pyright`: **passed**, 0 errors and 0 warnings.
 - `python -m ruff check .`: **passed**.
 - `python -m ruff format --check .`: **passed**.
-- `python -m pytest`: **15 passed**, 118/118 measured statements covered (100%).
+- Current combined `python -m pytest` with an isolated PostgreSQL test database: **29 passed**, **86% measured statement coverage**. Without `ALLFAB_TEST_DATABASE_URL`, the deterministic unit suite reports **26 passed, 3 skipped**.
 - `python -m pip check`: **passed**, no broken requirements.
 - `python -m pip_audit`: **passed**, no known vulnerabilities in the environment; the unpublished local package was correctly skipped.
 - `python -m pip_audit -r requirements.lock` and `requirements-dev.lock`: **passed**, no known vulnerabilities.
 - Hash-locked development install dry run: **passed**.
 - Live host Uvicorn smoke test without configured dependencies: `/healthz` **HTTP 200**; `/readyz` **HTTP 503** with both dependency states `unavailable` and no exception details.
-- `docker compose --env-file infra/.env.example -f infra/compose.yaml config --quiet`: **passed** without a daemon; rendered configuration confirms the PostgreSQL volume target is `/var/lib/postgresql` as required by the version 18 image layout.
+- `docker compose --env-file infra/.env.example -f infra/compose.yaml config --quiet`: **passed**; rendered configuration confirms the PostgreSQL volume target is `/var/lib/postgresql` as required by the version 18 image layout.
+- `docker compose --env-file infra/.env.example -f infra/compose.yaml up -d --build --pull always --wait`: **passed** after building the API image; API, PostgreSQL and LocalStack all reported healthy.
+- Historical pre-enrollment evidence remains **18 tests passed** with **89% coverage**; it has been superseded by the current combined enrollment result above.
+- Live database migration verification now records `001_catalog` and `002_device_enrollment`; the enrollment tables exist and migration reruns are serialized/idempotent.
+- Live enrollment smoke flow: issue code through the local CLI, enroll **HTTP 200**, authenticate **HTTP 200**, rotate refresh **HTTP 200**, refresh replay **HTTP 401**, code reuse **HTTP 401**, revoke, then access/refresh both **HTTP 401**. Stored device-token values were all 64-character hashes; raw credentials were not printed in verification output.
+- Live Compose endpoint checks: `/healthz` **HTTP 200** and `/readyz` **HTTP 200** with PostgreSQL and object storage ready.
+- PostgreSQL outage injection: `/healthz` stayed **HTTP 200**; `/readyz` returned redacted **HTTP 503** with PostgreSQL unavailable and object storage ready. After PostgreSQL restart, `/readyz` returned **HTTP 200** and both dependencies reported ready.
 - `docker manifest inspect` for both pinned images: **passed**.
 - Git Bash syntax check for `infra/localstack/init/10-create-bucket.sh`: **passed**.
 - Secret-pattern scan: **0 matches**; unignored real `.env` files: **0**.
 - Free disk during ECC delivery check: approximately **1,092 GB**.
-- Post-reboot platform diagnostics: physical Alienware m18 R2; `HypervisorPresent: True`; virtualization-based security running; both `VirtualMachinePlatform` and `Microsoft-Windows-Subsystem-Linux` report **Enabled**; Docker Desktop still reports the platform unavailable because `C:\Windows\System32\vmcompute.exe` and the `vmcompute` service are absent.
-- Windows component-store scan: **passed**, no corruption detected. The correct `vmcompute.exe` payload exists in WinSxS, but CBS logged that the feature transaction was pended and not committed. SFC could not run because Windows reports a repair transaction pending.
+- The API's pre-existing Windows `.venv` references a Python installation that is no longer present. Containerized Python 3.12 provided a clean environment for the passing test suite and live dependency checks.
+- iPad host-side validation after enrollment slice: `Info.plist` parses as XML; `ios/project.yml` parses as YAML using the running API container's Python; `git diff --check` passes. No `swift`, `xcodebuild`, or `xcodegen` command is installed on this Windows host. These checks do **not** establish Swift compilation, test success, or Xcode project-generation success.
 
 ## ECC roles used
 
@@ -62,32 +75,29 @@
 - `ecc:fastapi-patterns` — typed response models, thin routes, service injection, settings, and testable external adapters.
 - `ecc:security-review` — credential handling, input/config validation, redacted errors, dependency audit, and secret scan.
 - `ecc:verification-loop` and `ecc:delivery-gate` — build, type, lint, coverage, security, diff, and target-environment separation.
+- `ecc:orch-build-mvp`, `ecc:swiftui-patterns`, `ecc:swift-concurrency-6-2`, `ecc:swift-actor-persistence`, and `ecc:swift-protocol-di-testing` — approved vertical-slice plan and the initial native-app architecture boundary.
 
 No critical or high security finding remains in this slice. The checked-in credentials are explicitly public emulator/development values and must never be reused outside the loopback-only local stack.
 
 ## Xcode / physical-device evidence
 
-- Xcode build: **NOT RUN — no Xcode project exists yet; Windows cannot provide this evidence.**
+- XcodeGen project generation: **NOT RUN — the source specification exists, but XcodeGen is intentionally executed by macOS CI.**
+- Xcode build and Swift tests: **NOT RUN — Xcode is unavailable on Windows; `.github/workflows/ios-ci.yml` must run on its pinned macOS/Xcode image before this evidence exists.**
+- Simulator UI tests: **NOT RUN — the test target is authored but has not run.**
 - Physical iPad acceptance: **NOT RUN — requires a provisioned physical device in later phases.**
 
 ## Known limitations and dependencies
 
-- Windows reports `HypervisorPresent: True`, confirming firmware virtualization is active. WSL 3.0.5 and Docker Desktop 4.99.0 are installed, the owner is an active member of `docker-users`, and Docker onboarding is complete. The remaining failure is Windows servicing, not firmware, Docker authentication, or repository code.
-- Local Windows policy sets `DisableWindowsUpdateAccess=1`, `NoAutoUpdate=1`, `UseWUServer=1`, disables the `wuauserv` service, and points WSUS at two non-resolving placeholder hostnames. The computer is not domain- or Azure AD-joined but is workplace-joined. Changing those policies requires explicit owner/company authorization.
+- The containerized API and local dependencies now pass live readiness and outage-recovery checks. The Windows host `.venv` is stale; use the documented container workflow or recreate the virtual environment from the hash-locked requirements if host-run development is needed.
 - Docker Desktop is proprietary software. Any first-launch subscription terms must be reviewed and accepted only by an authorized owner/company representative.
-- Container startup, persisted-volume behavior, live PostgreSQL/S3 probes, and dependency outage transitions remain target checks, not inferred passes.
+- Live container startup, live PostgreSQL/S3 probes, and PostgreSQL outage/recovery transitions are verified. Long-term persisted-volume survival across destructive/recreate scenarios and object-storage outage injection remain unverified.
 - GitHub remote/private repository and hosted macOS runner are not configured.
-- No Git author name or email is configured, so no identity was invented and no commit was created.
+- The user supplied repository-local Git author identity. The baseline and iPad scaffold commits exist; the repaired enrollment changes remain uncommitted pending review and the next commit gate.
+- Enrollment and refresh endpoints do not yet have application-level rate limiting. Keep the local stack loopback-only; production exposure requires an approved HTTPS ingress/gateway rate-limit policy or an explicitly designed shared limiter.
 - Apple Developer, Apple Business, and Mosyle access remain later organizational dependencies.
 
-## Restart-safe next step
+## Codex handoff — immediate next actions
 
-After the owner or authorized company administrator resolves the Windows Update policy:
+The iPad enrollment client/form and Keychain session boundary are now authored, but remain uncompiled and untested by Swift/Xcode. No Git remote is configured in this workspace, and Windows has no Swift/Xcode toolchain. Configure a private GitHub remote and run `.github/workflows/ios-ci.yml` on its macOS runner; fix any project-generation, compiler, or test failures before expanding the client to refresh/authenticated catalog behavior. The configured API endpoint defaults to loopback for local development; physical-device access requires an approved reachable HTTPS endpoint and must not be enabled through a broad insecure transport exception.
 
-1. Restore a valid Windows Update source/service configuration, complete the pending CBS transaction, and run SFC successfully. Do not silently override an intentional organizational policy.
-2. Verify that `vmcompute` is installed, `wsl --status` succeeds, and `docker version` reports a Linux server engine.
-3. Run Compose with `up -d --wait` using `infra/.env.example` copied to `infra/.env`.
-4. Copy the same example to `api/.env`, start Uvicorn, and verify `/readyz` returns HTTP 200.
-5. Stop PostgreSQL and object storage separately; verify `/readyz` returns redacted HTTP 503 while `/healthz` remains HTTP 200.
-6. Restart services and confirm data/bucket persistence, then stop with `docker compose down` without deleting volumes.
-7. Record the live evidence and begin the migration/seed-data milestone only after these checks pass.
+The enrollment backend prerequisite is verified locally. Keep code issuance local-CLI-only pending an approved administrator authentication design; do not add an unauthenticated issuance route. Before production exposure, resolve rate limiting and HTTPS deployment policy. The next bounded app task is the typed iOS enrollment client and Keychain-backed session boundary, but XcodeGen generation, compilation, unit tests, and UI tests still require the unconfigured macOS CI runner. The catalog endpoint, upload validation, signed media authorization, verified download, and AVKit playback remain unimplemented.

@@ -9,7 +9,13 @@ struct AppShellView: View {
         } detail: {
             switch model.launchState {
             case .enrollmentRequired:
-                EnrollmentRequiredView()
+                if let enrollmentModel = model.enrollmentModel, enrollmentModel.isEnrolled {
+                    OfflineLibraryPlaceholderView()
+                } else if let enrollmentModel = model.enrollmentModel {
+                    EnrollmentView(model: enrollmentModel)
+                } else {
+                    EnrollmentRequiredView()
+                }
             case .libraryPlaceholder:
                 OfflineLibraryPlaceholderView()
             }
