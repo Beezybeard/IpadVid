@@ -64,11 +64,10 @@ private struct OfflineLibraryPlaceholderView: View {
                 Image(systemName: "wifi.slash")
                 Text("Offline")
                     .fontWeight(.semibold)
+                    .accessibilityLabel("Connection status: Offline")
+                    .accessibilityIdentifier("library.connection.offline")
             }
             .foregroundStyle(.secondary)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Connection status: Offline")
-            .accessibilityIdentifier("library.connection.offline")
 
             ContentUnavailableView(
                 "No downloaded videos",
