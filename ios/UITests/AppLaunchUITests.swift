@@ -1,11 +1,11 @@
 import XCTest
 
-@MainActor
 final class AppLaunchUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
     }
 
+    @MainActor
     func testNormalLaunchShowsEnrollmentForm() {
         let app = XCUIApplication()
         app.launch()
@@ -15,6 +15,7 @@ final class AppLaunchUITests: XCTestCase {
         XCTAssertTrue(app.buttons["enrollment.submit"].exists)
     }
 
+    @MainActor
     func testOfflineLibraryPlaceholderHasNoPlayButton() {
         let app = XCUIApplication()
         app.launchArguments.append("--ui-test-library")
